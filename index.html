@@ -32,7 +32,7 @@
     let fullKnowledgeBase = "";
     const selectedModel = "Llama-3.1-8B-Instruct-q4f16_1-MLC";
 
-    // 自動從 data/ 資料夾載入三份教材
+    // 自動從 data/ 資料夾載入三份指定教材檔案
     async function loadKnowledgeBase() {
       const statusEl = document.getElementById("status");
       statusEl.innerText = "⏳ 正在讀取教材資料庫...";
@@ -44,14 +44,14 @@
         ]);
 
         if (!res1.ok || !res2.ok || !res3.ok) {
-          throw new Error("無法讀取教材檔案，請確認 data/doc1.txt, doc2.txt, doc3.txt 是否已上傳。");
+          throw new Error("無法讀取教材檔案，請確認 data/ 資料夾下的三份 .txt 檔案名稱是否正確並已上傳至 GitHub。");
         }
 
         const doc1 = await res1.text();
         const doc2 = await res2.text();
         const doc3 = await res3.text();
 
-        fullKnowledgeBase = `【教材一】\n${doc1}\n\n【教材二】\n${doc2}\n\n【教材三】\n${doc3}`;
+        fullKnowledgeBase = `【教材一：三國演義教材】\n${doc1}\n\n【教材二：文化保育】\n${doc2}\n\n【教材三：香港特別行政區維護國家安全法】\n${doc3}`;
         statusEl.innerText = "✅ 教材載入成功！正在初始化 AI 模型...";
         return true;
       } catch (err) {
@@ -80,7 +80,7 @@
         statusEl.innerText = "🎓 助教已上線！你可以點擊下方快捷問題或直接輸入提問。";
         statusEl.style.color = "#059669";
         
-        // 模型載入完畢後，讓助教自動發送開場招呼語
+        // 助教開場招呼語
         chatBox.innerHTML += `<div class="msg bot">👩‍🏫 課程助教：我是你 GEK2033 課程的助教，你可以問我有關文化安全和文化保育的問題啊，我會盡量解答的！</div>`;
         chatBox.scrollTop = chatBox.scrollHeight;
 
@@ -174,7 +174,7 @@ ${fullKnowledgeBase}`;
 
   <div class="card">
     <div id="chat-box">
-      <div class="msg system-msg">系統提示：助教將僅依據課程教材（包含國安文化安全、《三國志》衍生文化挪用、藍屋與上博楚簡等案例）為你解答。</div>
+      <div class="msg system-msg">系統提示：助教將僅依據課程教材為你解答。</div>
     </div>
 
     <!-- 預設快捷問題按鈕區域 -->
