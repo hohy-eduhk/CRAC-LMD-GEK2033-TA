@@ -43,7 +43,7 @@
     const chatHistory = [];
     
     // 設定模型（可根據需求調整，建議選擇輕量量化模型）
-    const SELECTED_MODEL = "Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
+    const SELECTED_MODEL = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
 
     // 頁面載入完成後自動初始化
     window.addEventListener("DOMContentLoaded", async () => {
@@ -85,38 +85,26 @@
       }
     }
 
-    // 2. 初始化 WebLLM 引擎
-    async function initWebLLM() {
-      const statusDiv = document.getElementById("status");
-      try {
-        const initProgressCallback = (report) => {
-          statusDiv.innerText = `⏳ 載入 AI 模型中: ${report.text}`;
-        };
+   // 2. 初始化 WebLLM 引擎（使用官方預設模型與 WASM）
+async function initWebLLM() {
+  const statusDiv = document.getElementById("status");
+  try {
+    const initProgressCallback = (report) => {
+      statusDiv.innerText = `⏳ 載入 AI 模型中: ${report.text}`;
+    };
 
-        // 初始化 MLCEngine
-        engine = await webllm.CreateMLCEngine(SELECTED_MODEL, {
-          initProgressCallback: initProgressCallback,
-          // ⚠️ 【關鍵修正 2】手動將 context_window_size 調大（若顯存允許）
-          appConfig: {
-            model_list: [
-              {
-                model: `https://huggingface.co/mlc-ai/${SELECTED_MODEL}`,
-                model_id: SELECTED_MODEL,
-                overrides: {
-                  context_window_size: 8192,
-                },
-              },
-            ],
-          },
-        });
+    // 直接使用標準模型 ID 初始化，WebLLM 會自動尋找配對的 model_lib
+    engine = await webllm.CreateMLCEngine(SELECTED_MODEL, {
+      initProgressCallback: initProgressCallback,
+    });
 
-        statusDiv.innerText = "🚀 AI 模組準備就緒，可以開始提問囉！";
-        document.getElementById("send-btn").disabled = false;
-      } catch (err) {
-        console.error("WebGPU / 模型初始化失敗:", err);
-        showStatus("❌ AI 模組啟動失敗，請確保瀏覽器支援 WebGPU 並已開啟硬體加速 (建議使用 Chrome/Edge)。", "error");
-      }
-    }
+    statusDiv.innerText = "🚀 AI 模組準備就緒，可以開始提問囉！";
+    document.getElementById("send-btn").disabled = false;
+  } catch (err) {
+    console.error("WebGPU / 模型初始化失敗:", err);
+    showStatus("❌ AI 模組啟動失敗，請確保瀏覽器支援 WebGPU 並已開啟硬體加速 (建議使用 Chrome/Edge)。", "error");
+  }
+}
 
     // 3. 發送訊息邏輯
     window.sendMessage = async function () {
