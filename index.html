@@ -3,200 +3,212 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GEK2033 課程助教 Chatbot</title>
+  <title>CRAC-LMD-GEK2033 課程助教</title>
   <style>
-    body { font-family: system-ui, -apple-system, sans-serif; max-width: 800px; margin: 20px auto; padding: 20px; background: #f4f6f9; }
-    .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px; }
-    #status { font-weight: bold; color: #d97706; margin-bottom: 10px; }
-    #chat-box { height: 380px; border: 1px solid #e5e7eb; overflow-y: auto; padding: 15px; border-radius: 6px; background: #fafafa; margin-bottom: 12px; }
-    .msg { margin-bottom: 12px; line-height: 1.6; }
-    .user { color: #1e40af; font-weight: 600; }
-    .bot { color: #065f46; white-space: pre-wrap; }
-    .system-msg { color: #6b7280; font-style: italic; font-size: 0.9em; }
-    
-    /* 預設問題按鈕樣式 */
-    .preset-container { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px; }
-    .preset-btn { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; padding: 6px 12px; border-radius: 16px; font-size: 13px; cursor: pointer; transition: all 0.2s; }
-    .preset-btn:hover { background: #dbeafe; border-color: #93c5fd; }
-    .preset-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    .input-area { display: flex; gap: 10px; }
-    input[type="text"] { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
-    button.send-btn { padding: 10px 20px; background: #1e40af; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; }
-    button.send-btn:disabled { background: #9ca3af; cursor: not-allowed; }
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 0 20px;
+    }
+    #chat-box {
+      border: 1px solid #ccc;
+      height: 400px;
+      overflow-y: auto;
+      padding: 10px;
+      margin-bottom: 10px;
+      border-radius: 5px;
+      background-color: #f9f9f9;
+    }
+    .message {
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+    .user { color: #0056b3; font-weight: bold; }
+    .assistant { color: #155724; }
+    .system-status { color: #856404; background-color: #fff3cd; padding: 5px; margin-bottom: 10px; border-radius: 3px; }
+    .error { color: #721c24; background-color: #f8d7da; padding: 5px; margin-bottom: 10px; border-radius: 3px; }
+    #input-container { display: flex; gap: 10px; }
+    #user-input { flex: 1; padding: 10px; border-radius: 4px; border: 1px solid #ccc; }
+    button { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    button:disabled { background-color: #cccccc; cursor: not-allowed; }
   </style>
+
+  <!-- 引入 WebLLM SDK (Module 形式) -->
   <script type="module">
     import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
     let engine = null;
-    let fullKnowledgeBase = "";
-    const selectedModel = "Llama-3.1-8B-Instruct-q4f16_1-MLC";
+    let docContext = "";
+    const chatHistory = [];
+    
+    // 設定模型（可根據需求調整，建議選擇輕量量化模型）
+    const SELECTED_MODEL = "Llama-3-8B-Instruct-q4f16_1-MLC";
 
-    // 從 data/ 資料夾載入 doc1.txt, doc2.txt, doc3.txt
-    async function loadKnowledgeBase() {
-      const statusEl = document.getElementById("status");
-      statusEl.innerText = "⏳ 正在讀取教材資料庫...";
+    // 頁面載入完成後自動初始化
+    window.addEventListener("DOMContentLoaded", async () => {
+      await loadMaterials();
+      await initWebLLM();
+    });
+
+    // 1. 載入教材檔案 (處理路徑與字數截斷)
+    async function loadMaterials() {
+      const statusDiv = document.getElementById("status");
+      statusDiv.innerText = "⏳ 正在載入教材檔案...";
+
       try {
-        const [res1, res2, res3] = await Promise.all([
-          fetch('./data/doc1.txt'),
-          fetch('./data/doc2.txt'),
-          fetch('./data/doc3.txt')
+        // 請確保 GitHub 倉庫根目錄下有 data/ 資料夾
+        const fetchDoc = async (filename) => {
+          const res = await fetch(`data/${filename}`);
+          if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+          return await res.text();
+        };
+
+        const [d1, d2, d3] = await Promise.all([
+          fetchDoc("doc1.txt").catch(() => ""),
+          fetchDoc("doc2.txt").catch(() => ""),
+          fetchDoc("doc3.txt").catch(() => "")
         ]);
 
-        if (!res1.ok || !res2.ok || !res3.ok) {
-          throw new Error("無法讀取教材檔案，請確認 data/ 資料夾下的 doc1.txt, doc2.txt, doc3.txt 是否已上傳至 GitHub。");
-        }
+        // ⚠️ 【關鍵修正 1】限制每個教材最大字數，避免超過 Context Window
+        const MAX_CHAR_PER_DOC = 1000;
+        docContext = `
+【教材一】: ${d1.slice(0, MAX_CHAR_PER_DOC)}
+【教材二】: ${d2.slice(0, MAX_CHAR_PER_DOC)}
+【教材三】: ${d3.slice(0, MAX_CHAR_PER_DOC)}
+        `.trim();
 
-        const doc1 = await res1.text();
-        const doc2 = await res2.text();
-        const doc3 = await res3.text();
-
-        fullKnowledgeBase = `【教材一：三國演義教材】\n${doc1}\n\n【教材二：文化保育】\n${doc2}\n\n【教材三：香港特別行政區維護國家安全法】\n${doc3}`;
-        statusEl.innerText = "✅ 教材載入成功！正在初始化 AI 模型...";
-        return true;
+        statusDiv.innerText = "✅ 教材載入成功！正在初始化 AI 引擎...";
       } catch (err) {
-        statusEl.innerText = `❌ 教材載入失敗：${err.message}`;
-        statusEl.style.color = "#dc2626";
-        return false;
+        console.error("教材載入失敗:", err);
+        showStatus("⚠️ 教材載入失敗，請確認 data/ 資料夾下是否有 doc1.txt, doc2.txt, doc3.txt", "error");
       }
     }
 
-    window.initEngine = async function() {
-      const statusEl = document.getElementById("status");
-      const sendBtn = document.getElementById("send-btn");
-      const presetBtns = document.querySelectorAll(".preset-btn");
-      const chatBox = document.getElementById("chat-box");
-
-      const loaded = await loadKnowledgeBase();
-      if (!loaded) return;
-
+    // 2. 初始化 WebLLM 引擎
+    async function initWebLLM() {
+      const statusDiv = document.getElementById("status");
       try {
-        engine = await webllm.CreateMLCEngine(selectedModel, {
-          initProgressCallback: (progress) => {
-            statusEl.innerText = `⏳ AI 模型載入中: ${progress.text}`;
-          }
+        const initProgressCallback = (report) => {
+          statusDiv.innerText = `⏳ 載入 AI 模型中: ${report.text}`;
+        };
+
+        // 初始化 MLCEngine
+        engine = await webllm.CreateMLCEngine(SELECTED_MODEL, {
+          initProgressCallback: initProgressCallback,
+          // ⚠️ 【關鍵修正 2】手動將 context_window_size 調大（若顯存允許）
+          appConfig: {
+            model_list: [
+              {
+                model: `https://huggingface.co/mlc-ai/${SELECTED_MODEL}`,
+                model_id: SELECTED_MODEL,
+                overrides: {
+                  context_window_size: 8192,
+                },
+              },
+            ],
+          },
         });
 
-        statusEl.innerText = "🎓 助教已上線！你可以點擊下方快捷問題或直接輸入提問。";
-        statusEl.style.color = "#059669";
-        
-        // 助教開場招呼語
-        chatBox.innerHTML += `<div class="msg bot">👩‍🏫 課程助教：我是你 GEK2033 課程的助教，你可以問我有關文化安全和文化保育的問題啊，我會盡量解答的！</div>`;
-        chatBox.scrollTop = chatBox.scrollHeight;
-
-        sendBtn.disabled = false;
-        presetBtns.forEach(btn => btn.disabled = false);
+        statusDiv.innerText = "🚀 AI 模組準備就緒，可以開始提問囉！";
+        document.getElementById("send-btn").disabled = false;
       } catch (err) {
-        statusEl.innerText = "❌ AI 模組啟動失敗，請確保瀏覽器支援 WebGPU (建議使用 Chrome 或 Edge)。";
-        statusEl.style.color = "#dc2626";
-        console.error(err);
+        console.error("WebGPU / 模型初始化失敗:", err);
+        showStatus("❌ AI 模組啟動失敗，請確保瀏覽器支援 WebGPU 並已開啟硬體加速 (建議使用 Chrome/Edge)。", "error");
       }
-    };
+    }
 
-    // 點擊快捷問題時調用
-    window.askPreset = function(questionText) {
+    // 3. 發送訊息邏輯
+    window.sendMessage = async function () {
       const inputEl = document.getElementById("user-input");
-      inputEl.value = questionText;
-      window.sendMessage();
-    };
+      const userText = inputEl.value.trim();
+      if (!userText || !engine) return;
 
-    window.sendMessage = async function() {
-      const inputEl = document.getElementById("user-input");
-      const chatBox = document.getElementById("chat-box");
-      const sendBtn = document.getElementById("send-btn");
-      const presetBtns = document.querySelectorAll(".preset-btn");
-      const question = inputEl.value.trim();
-
-      if (!question || !engine) return;
-
-      chatBox.innerHTML += `<div class="msg user">🎓 學生：${question}</div>`;
       inputEl.value = "";
-      
-      // 鎖定按鈕避免重複觸發
-      sendBtn.disabled = true;
-      presetBtns.forEach(btn => btn.disabled = true);
+      appendMessage("user", `你：${userText}`);
+      document.getElementById("send-btn").disabled = true;
 
-      // 嚴格助教 Prompt 控制
-      const systemPrompt = `你是一位 GEK2033 大學國安教育與文化保育課程的專屬助教。你的語氣專業、耐心且具啟發性，專門幫助學生理解香港國安教育中文化安全部分，並透過理解傳統文學作品《三國志》及其衍生作品與文化挪用，以及各地文化保育的相關知識。
+      // 將使用者輸入寫入紀錄
+      chatHistory.push({ role: "user", content: userText });
 
-【嚴格規則】：
-1. 當學生提問時，必須「僅限」使用下方的【課程教材】內容來回答。
-2. 若教材中有相關案例（如香港藍屋、上博楚簡、日本三國遊戲等），請優先引用這些案例來解釋概念。
-3. 如果學生的問題超出了教材範圍，請禮貌回覆：「這部分不在我們目前的教材範圍內喔！你想了解教材中的『文化挪用』還是『文化保育』呢？」
-4. 絕對不要自己編造或在網上搜尋教材以外的知識或歷史細節。
-
-【課程教材】：
-${fullKnowledgeBase}`;
-
-      const messages = [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: question }
-      ];
-
-      const botMsgDiv = document.createElement("div");
-      botMsgDiv.className = "msg bot";
-      botMsgDiv.innerText = "👩‍🏫 課程助教：";
-      chatBox.appendChild(botMsgDiv);
+      // 建立對話框給 AI 填寫 Stream 回應
+      const aiMessageEl = appendMessage("assistant", "課程助教：思考中...");
 
       try {
+        // 建立完整的 System Prompt
+        const systemPrompt = `你是一名嚴謹專業的課程助教 (CRAC-LMD-GEK2033-TA)。請優先根據以下提供的教材內容回答問題。如果教材中沒有提及，請優雅地說明並給出合理的引導。\n\n${docContext}`;
+
+        // ⚠️ 【關鍵修正 3】只取最新的 4 則對話歷史，防止 Token 累積過長
+        const MAX_HISTORY = 4;
+        const recentHistory = chatHistory.slice(-MAX_HISTORY);
+
+        const messages = [
+          { role: "system", content: systemPrompt },
+          ...recentHistory
+        ];
+
+        // 呼叫 WebLLM 進行串流生成
         const completion = await engine.chat.completions.create({
-          messages,
+          messages: messages,
           stream: true,
-          temperature: 0.1
+          temperature: 0.7,
+          max_tokens: 512, // 限制單次生成的最大 Token 數量
         });
 
+        let fullResponse = "";
         for await (const chunk of completion) {
           const delta = chunk.choices[0]?.delta?.content || "";
-          botMsgDiv.innerText += delta;
-          chatBox.scrollTop = chatBox.scrollHeight;
+          fullResponse += delta;
+          aiMessageEl.innerText = `課程助教：${fullResponse}`;
+          scrollChatToBottom();
         }
+
+        // 紀錄 AI 回應至歷史
+        chatHistory.push({ role: "assistant", content: fullResponse });
+
       } catch (error) {
-        botMsgDiv.innerText += "\n[回答生成中斷，請重試]";
-        console.error(error);
+        console.error("生成錯誤:", error);
+        aiMessageEl.innerText = "課程助教：[回答生成中斷，請重試]";
+        aiMessageEl.classList.add("error");
       } finally {
-        sendBtn.disabled = false;
-        presetBtns.forEach(btn => btn.disabled = false);
+        document.getElementById("send-btn").disabled = false;
       }
     };
 
-    window.addEventListener("DOMContentLoaded", () => {
-      window.initEngine();
-    });
+    // UI 輔助函式
+    function appendMessage(role, text) {
+      const chatBox = document.getElementById("chat-box");
+      const msgDiv = document.createElement("div");
+      msgDiv.className = `message ${role}`;
+      msgDiv.innerText = text;
+      chatBox.appendChild(msgDiv);
+      scrollChatToBottom();
+      return msgDiv;
+    }
+
+    function scrollChatToBottom() {
+      const chatBox = document.getElementById("chat-box");
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function showStatus(text, type) {
+      const statusDiv = document.getElementById("status");
+      statusDiv.innerText = text;
+      statusDiv.className = type === "error" ? "error" : "system-status";
+    }
   </script>
 </head>
 <body>
 
-  <div class="card">
-    <h2>🏛️ GEK2033 課程助教</h2>
-    <p>👩‍🏫 課程助教：我是你 GEK2033 課程的助教，你可以問我有關文化安全和文化保育的問題啊，我會盡量解答的！</p>
-    <div id="status">準備中...</div>
+  <h2>🎓 課程助教 AI 問答系統</h2>
+  <div id="status" class="system-status">正在載入系統中...</div>
+
+  <div id="chat-box"></div>
+
+  <div id="input-container">
+    <input type="text" id="user-input" placeholder="請輸入關於課程的問題..." onkeypress="if(event.key==='Enter') sendMessage()" />
+    <button id="send-btn" onclick="sendMessage()" disabled>發送</button>
   </div>
 
-  <div class="card">
-    <div id="chat-box">
-      <div class="msg system-msg">系統提示：助教將依據課程教材為你解答。</div>
-    </div>
-
-    <!-- 預設快捷問題按鈕區域 -->
-    <div class="preset-container">
-      <button class="preset-btn" onclick="askPreset('甚麼是文化挪用？')" disabled>💡 甚麼是文化挪用？</button>
-      <button class="preset-btn" onclick="askPreset('甚麼是文化保育？')" disabled>💡 甚麼是文化保育？</button>
-      <button class="preset-btn" onclick="askPreset('甚麼是文化安全？')" disabled>💡 甚麼是文化安全？</button>
-      <button class="preset-btn" onclick="askPreset('文化挪用與三國志有甚麼關係？')" disabled>💡 文化挪用與三國志有甚麼關係？</button>
-    </div>
-
-    <div class="input-area">
-      <input type="text" id="user-input" placeholder="請輸入你的問題..." onkeydown="if(event.key==='Enter') sendMessage()" />
-      <button id="send-btn" class="send-btn" onclick="sendMessage()" disabled>發送</button>
-    </div>
-  </div>
-// 範例：限制讀取的教材內容最大長度（例如只保留前 3000 個字）
-const MAX_DOC_LENGTH = 3000; 
-
-let truncatedDoc1 = doc1Text.slice(0, MAX_DOC_LENGTH);
-let truncatedDoc2 = doc2Text.slice(0, MAX_DOC_LENGTH);
-let truncatedDoc3 = doc3Text.slice(0, MAX_DOC_LENGTH);
-
-// 再放入 prompt 中
 </body>
 </html>
