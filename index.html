@@ -32,19 +32,19 @@
     let fullKnowledgeBase = "";
     const selectedModel = "Llama-3.1-8B-Instruct-q4f16_1-MLC";
 
-    // 自動從 data/ 資料夾載入三份指定教材檔案
+    // 從 data/ 資料夾載入 doc1.txt, doc2.txt, doc3.txt
     async function loadKnowledgeBase() {
       const statusEl = document.getElementById("status");
       statusEl.innerText = "⏳ 正在讀取教材資料庫...";
       try {
         const [res1, res2, res3] = await Promise.all([
-          fetch('./data/01_GEK2033_例子一_三國演義教材_20260521.txt'),
-          fetch('./data/02_GEK2033_例子二_文化保育20260519.txt'),
-          fetch('./data/03_GEK2033_2020年全國性法律公布——中華人民共和國香港特別行政區維護國家安全.txt')
+          fetch('./data/doc1.txt'),
+          fetch('./data/doc2.txt'),
+          fetch('./data/doc3.txt')
         ]);
 
         if (!res1.ok || !res2.ok || !res3.ok) {
-          throw new Error("無法讀取教材檔案，請確認 data/ 資料夾下的三份 .txt 檔案名稱是否正確並已上傳至 GitHub。");
+          throw new Error("無法讀取教材檔案，請確認 data/ 資料夾下的 doc1.txt, doc2.txt, doc3.txt 是否已上傳至 GitHub。");
         }
 
         const doc1 = await res1.text();
@@ -122,7 +122,7 @@
 【嚴格規則】：
 1. 當學生提問時，必須「僅限」使用下方的【課程教材】內容來回答。
 2. 若教材中有相關案例（如香港藍屋、上博楚簡、日本三國遊戲等），請優先引用這些案例來解釋概念。
-3. 如果學生的問題超出了教材範圍，請禮貌回覆：「這部分不在我們目前的教材範圍內喔！你想了解教材中的『文化挪用』還是『文物保育』呢？」
+3. 如果學生的問題超出了教材範圍，請禮貌回覆：「這部分不在我們目前的教材範圍內喔！你想了解教材中的『文化挪用』還是『文化保育』呢？」
 4. 絕對不要自己編造或在網上搜尋教材以外的知識或歷史細節。
 
 【課程教材】：
