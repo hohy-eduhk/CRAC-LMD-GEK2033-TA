@@ -201,8 +201,8 @@
     let docContext = "";
     const chatHistory = [];
     
-  // ⚡ 選項 2：Qwen 2.5 0.5B（體積小，中文理解力依然優秀）
-// const SELECTED_MODEL = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+// 使用輕量模型確保極速回應
+    const SELECTED_MODEL = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
 
     window.addEventListener("DOMContentLoaded", async () => {
       await loadMaterials();
