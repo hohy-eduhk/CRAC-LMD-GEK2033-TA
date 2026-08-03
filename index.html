@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CRAC-LMD-GEK2033 課程助教</title>
+  <style>
+    :root {
+      --bg-color: #f4f6f9;
+      --user-bg: #007bff;
+      --user-color: #ffffff;
+      --bot-bg: #ffffff;
+      --bot-color: #212529;
+      --border-color: #e9ecef;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg-color);
+      max-width: 850px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .chat-card {
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 85vh;
+    }
+
+    .chat-header {
+      background: #ffffff;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .chat-header .avatar-main {
+      width: 40px;
+      height: 40px;
+      background: #e7f1ff;
+      color: #007bff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 1.1em;
+    }
+
+    .chat-header-info h3 { margin: 0; font-size: 1.1em; color: #2c3e50; }
+    .chat-header-info p { margin: 2px 0 0; font-size: 0.82em; color: #6c757d; }
+
+    .system-status {
+      font-size: 0.85em;
+      padding: 8px 16px;
+      background: #fff8e6;
+      color: #8a6d3b;
+      border-bottom: 1px solid #faebcc;
+      text-align: center;
+    }
+    .system-status.error { background: #f2dede; color: #a94442; border-color: #ebccd1; }
+
+    #chat-box {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+      background-color: #f8f9fa;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .message-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+      max-width: 80%;
+    }
+
+    .message-row.user {
+      align-self: flex-end;
+      flex-direction: row-reverse;
+    }
+
+    .message-row.assistant {
+      align-self: flex-start;
+    }
+
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85em;
+      font-weight: bold;
+      flex-shrink: 0;
+    }
+    .user .avatar { background: #007bff; color: white; }
+    .assistant .avatar { background: #28a745; color: white; }
+
+    .bubble {
+      padding: 12px 16px;
+      border-radius: 18px;
+      font-size: 0.95em;
+      line-height: 1.5;
+      word-break: break-word;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    }
+
+    .user .bubble {
+      background-color: var(--user-bg);
+      color: var(--user-color);
+      border-bottom-right-radius: 4px;
+    }
+
+    .assistant .bubble {
+      background-color: var(--bot-bg);
+      color: var(--bot-color);
+      border: 1px solid var(--border-color);
+      border-bottom-left-radius: 4px;
+    }
+
+    #suggested-questions {
+      padding: 10px 20px 0;
+      background: #ffffff;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .suggest-btn {
+      background-color: #f1f3f5;
+      color: #495057;
+      border: 1px solid #e9ecef;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.85em;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .suggest-btn:hover {
+      background-color: #e7f1ff;
+      color: #007bff;
+      border-color: #b6d4fe;
+    }
+    .suggest-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #input-container {
+      padding: 16px 20px;
+      background: #ffffff;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      gap: 10px;
+    }
+
+    #user-input {
+      flex: 1;
+      padding: 12px 16px;
+      border-radius: 24px;
+      border: 1px solid #ced4da;
+      outline: none;
+      font-size: 0.95em;
+      transition: border-color 0.2s;
+    }
+    #user-input:focus { border-color: #007bff; }
+
+    #send-btn {
+      padding: 0 20px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 24px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    #send-btn:hover { background-color: #0056b3; }
+    #send-btn:disabled { background-color: #cccccc; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+  <div class="chat-card">
+    <div class="chat-header">
+      <div class="avatar-main">TA</div>
+      <div class="chat-header-info">
+        <h3>GEK2033 課程線上助教</h3>
+        <p>文化安全與文化保育問答系統</p>
+      </div>
+    </div>
+
+    <div id="status" class="system-status">正在載入系統中...</div>
+
+    <div id="chat-box"></div>
+
+    <div id="suggested-questions">
+      <button class="suggest-btn" onclick="askQuestion('甚麼是文化挪用？')" disabled>💡 甚麼是文化挪用？</button>
+      <button class="suggest-btn" onclick="askQuestion('甚麼是文化保育？')" disabled>💡 甚麼是文化保育？</button>
+      <button class="suggest-btn" onclick="askQuestion('甚麼是文化安全？')" disabled>💡 甚麼是文化安全？</button>
+      <button class="suggest-btn" onclick="askQuestion('文化挪用與三國志有甚麼關係？')" disabled>💡 文化挪用與三國志有甚麼關係？</button>
+    </div>
+
+    <div id="input-container">
+      <input type="text" id="user-input" placeholder="輸入問題..." onkeypress="if(event.key==='Enter') sendMessage()" />
+      <button id="send-btn" onclick="sendMessage()" disabled>發送</button>
+    </div>
+  </div>
+
+  <script>
+    let docContext = "";
+    const chatHistory = [];
+
+    window.addEventListener("DOMContentLoaded", async () => {
+      await loadMaterials();
+    });
+
+    async function loadMaterials() {
+      const statusDiv = document.getElementById("status");
+      statusDiv.innerText = "⏳ 正在載入教材檔案...";
+
+      try {
+        const fetchDoc = async (filename) => {
+          const res = await fetch(`data/${filename}`);
+          if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+          return await res.text();
+        };
+
+        const [d1, d2, d3] = await Promise.all([
+          fetchDoc("doc1.txt").catch(() => ""),
+          fetchDoc("doc2.txt").catch(() => ""),
+          fetchDoc("doc3.txt").catch(() => "")
+        ]);
+
+        const MAX_CHAR_PER_DOC = 500;
+        docContext = `
+【教材一】: ${d1.slice(0, MAX_CHAR_PER_DOC)}
+【教材二】: ${d2.slice(0, MAX_CHAR_PER_DOC)}
+【教材三】: ${d3.slice(0, MAX_CHAR_PER_DOC)}
+        `.trim();
+
+        statusDiv.style.display = "none";
+        
+        const openingText = "我是你 GEK2033 課程的助教，你可以問我有關文化安全和文化保育的問題，我會盡量解答的！";
+        appendMessage("assistant", openingText);
+        chatHistory.push({ role: "assistant", content: openingText });
+
+        document.getElementById("send-btn").disabled = false;
+        toggleSuggestButtons(false);
+      } catch (err) {
+        console.error("教材載入失敗:", err);
+        showStatus("⚠️ 教材載入失敗，請確認 data/ 資料夾下是否有 doc1.txt, doc2.txt, doc3.txt", "error");
+      }
+    }
+
+    window.sendMessage = async function (customText = null) {
+      const inputEl = document.getElementById("user-input");
+      const userText = customText || inputEl.value.trim();
+      if (!userText) return;
+
+      inputEl.value = "";
+      appendMessage("user", userText);
+      
+      document.getElementById("send-btn").disabled = true;
+      toggleSuggestButtons(true);
+
+      chatHistory.push({ role: "user", content: userText });
+      const bubbleEl = appendMessage("assistant", "正在思考中...");
+
+      try {
+        const MAX_HISTORY = 4;
+        const recentHistory = chatHistory.slice(-MAX_HISTORY);
+
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: recentHistory,
+            docContext: docContext
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "請求失敗");
+
+        const fullText = data.reply;
+        const mainAnswer = fullText.split("[建議問題]")[0].trim();
+        bubbleEl.innerText = mainAnswer;
+
+        chatHistory.push({ role: "assistant", content: mainAnswer });
+        parseAndUpdateQuestions(fullText);
+
+      } catch (error) {
+        console.error("生成錯誤:", error);
+        bubbleEl.innerText = `⚠️ [系統錯誤]: ${error.message || "請求失敗，請重試"}`;
+      } finally {
+        document.getElementById("send-btn").disabled = false;
+        toggleSuggestButtons(false);
+      }
+    };
+
+    function parseAndUpdateQuestions(text) {
+      if (!text.includes("[建議問題]")) return;
+      const parts = text.split("[建議問題]")[1];
+      if (!parts) return;
+
+      const lines = parts.split("\n")
+        .map(l => l.replace(/^\d+[\.\:：]\s*/, "").trim())
+        .filter(l => l.length > 0)
+        .slice(0, 3);
+
+      if (lines.length > 0) {
+        renderSuggestedQuestions(lines);
+      }
+    }
+
+    function renderSuggestedQuestions(questions) {
+      const container = document.getElementById("suggested-questions");
+      container.innerHTML = "";
+
+      questions.forEach(q => {
+        const btn = document.createElement("button");
+        btn.className = "suggest-btn";
+        btn.innerText = `💡 ${q}`;
+        btn.onclick = () => window.askQuestion(q);
+        container.appendChild(btn);
+      });
+    }
+
+    window.askQuestion = function (questionText) {
+      window.sendMessage(questionText);
+    };
+
+    function toggleSuggestButtons(disabled) {
+      const buttons = document.querySelectorAll(".suggest-btn");
+      buttons.forEach(btn => btn.disabled = disabled);
+    }
+
+    function appendMessage(role, text) {
+      const chatBox = document.getElementById("chat-box");
+      const row = document.createElement("div");
+      row.className = `message-row ${role}`;
+
+      const avatar = document.createElement("div");
+      avatar.className = "avatar";
+      avatar.innerText = role === "user" ? "你" : "助";
+
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+      bubble.innerText = text;
+
+      row.appendChild(avatar);
+      row.appendChild(bubble);
+      
+      chatBox.appendChild(row);
+      chatBox.scrollTop = chatBox.scrollHeight;
+      return bubble;
+    }
+
+    function showStatus(text, type) {
+      const statusDiv = document.getElementById("status");
+      statusDiv.style.display = "block";
+      statusDiv.innerText = text;
+      statusDiv.className = type === "error" ? "system-status error" : "system-status";
+    }
+  </script>
+</body>
+</html>
