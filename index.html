@@ -28,13 +28,42 @@
     .assistant { color: #155724; }
     .system-status { color: #856404; background-color: #fff3cd; padding: 5px; margin-bottom: 10px; border-radius: 3px; }
     .error { color: #721c24; background-color: #f8d7da; padding: 5px; margin-bottom: 10px; border-radius: 3px; }
+    
+    /* 預設建議問題按鈕區塊樣式 */
+    #suggested-questions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+      min-height: 32px;
+    }
+    .suggest-btn {
+      background-color: #e9ecef;
+      color: #495057;
+      border: 1px solid #ced4da;
+      padding: 6px 12px;
+      border-radius: 16px;
+      font-size: 0.9em;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .suggest-btn:hover {
+      background-color: #007bff;
+      color: white;
+      border-color: #007bff;
+    }
+    .suggest-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
     #input-container { display: flex; gap: 10px; }
     #user-input { flex: 1; padding: 10px; border-radius: 4px; border: 1px solid #ccc; }
-    button { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-    button:disabled { background-color: #cccccc; cursor: not-allowed; }
+    #send-btn { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    #send-btn:disabled { background-color: #cccccc; cursor: not-allowed; }
   </style>
 
-  <!-- 引入 WebLLM SDK (Module 形式) -->
+  <!-- 引入 WebLLM SDK -->
   <script type="module">
     import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
@@ -42,7 +71,7 @@
     let docContext = "";
     const chatHistory = [];
     
-    // 設定模型（可根據需求調整，建議選擇輕量量化模型）
+    // 使用官方預設支援的輕量模型
     const SELECTED_MODEL = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
 
     // 頁面載入完成後自動初始化
@@ -51,13 +80,12 @@
       await initWebLLM();
     });
 
-    // 1. 載入教材檔案 (處理路徑與字數截斷)
+    // 1. 載入教材檔案
     async function loadMaterials() {
       const statusDiv = document.getElementById("status");
       statusDiv.innerText = "⏳ 正在載入教材檔案...";
 
       try {
-        // 請確保 GitHub 倉庫根目錄下有 data/ 資料夾
         const fetchDoc = async (filename) => {
           const res = await fetch(`data/${filename}`);
           if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -70,7 +98,6 @@
           fetchDoc("doc3.txt").catch(() => "")
         ]);
 
-        // ⚠️ 【關鍵修正 1】限制每個教材最大字數，避免超過 Context Window
         const MAX_CHAR_PER_DOC = 1000;
         docContext = `
 【教材一】: ${d1.slice(0, MAX_CHAR_PER_DOC)}
@@ -85,48 +112,58 @@
       }
     }
 
-   // 2. 初始化 WebLLM 引擎（使用官方預設模型與 WASM）
-async function initWebLLM() {
-  const statusDiv = document.getElementById("status");
-  try {
-    const initProgressCallback = (report) => {
-      statusDiv.innerText = `⏳ 載入 AI 模型中: ${report.text}`;
-    };
+    // 2. 初始化 WebLLM 引擎
+    async function initWebLLM() {
+      const statusDiv = document.getElementById("status");
+      try {
+        const initProgressCallback = (report) => {
+          statusDiv.innerText = `⏳ 載入 AI 模型中: ${report.text}`;
+        };
 
-    // 直接使用標準模型 ID 初始化，WebLLM 會自動尋找配對的 model_lib
-    engine = await webllm.CreateMLCEngine(SELECTED_MODEL, {
-      initProgressCallback: initProgressCallback,
-    });
+        engine = await webllm.CreateMLCEngine(SELECTED_MODEL, {
+          initProgressCallback: initProgressCallback,
+        });
 
-    statusDiv.innerText = "🚀 AI 模組準備就緒，可以開始提問囉！";
-    document.getElementById("send-btn").disabled = false;
-  } catch (err) {
-    console.error("WebGPU / 模型初始化失敗:", err);
-    showStatus("❌ AI 模組啟動失敗，請確保瀏覽器支援 WebGPU 並已開啟硬體加速 (建議使用 Chrome/Edge)。", "error");
-  }
-}
+        statusDiv.innerText = "🚀 AI 模組準備就緒，可以點擊下方建議問題或自行輸入！";
+        
+        // 顯示 Opening Text（開場白）
+        const openingText = "我是你GEK2033課程的助教，你可以問我有關文化安全和文化保育的問題，我會盡量解答的！";
+        appendMessage("assistant", `課程助教：${openingText}`);
+        chatHistory.push({ role: "assistant", content: openingText });
+
+        document.getElementById("send-btn").disabled = false;
+        toggleSuggestButtons(false);
+      } catch (err) {
+        console.error("WebGPU / 模型初始化失敗:", err);
+        showStatus("❌ AI 模組啟動失敗，請確保瀏覽器支援 WebGPU 並已開啟硬體加速 (建議使用 Chrome/Edge)。", "error");
+      }
+    }
 
     // 3. 發送訊息邏輯
-    window.sendMessage = async function () {
+    window.sendMessage = async function (customText = null) {
       const inputEl = document.getElementById("user-input");
-      const userText = inputEl.value.trim();
+      const userText = customText || inputEl.value.trim();
       if (!userText || !engine) return;
 
       inputEl.value = "";
       appendMessage("user", `你：${userText}`);
+      
       document.getElementById("send-btn").disabled = true;
+      toggleSuggestButtons(true);
 
-      // 將使用者輸入寫入紀錄
       chatHistory.push({ role: "user", content: userText });
-
-      // 建立對話框給 AI 填寫 Stream 回應
       const aiMessageEl = appendMessage("assistant", "課程助教：思考中...");
 
       try {
-        // 建立完整的 System Prompt
-        const systemPrompt = `你是一名嚴謹專業的課程助教 (CRAC-LMD-GEK2033-TA)。請優先根據以下提供的教材內容回答問題。如果教材中沒有提及，請優雅地說明並給出合理的引導。\n\n${docContext}`;
+        const systemPrompt = `你是一名嚴謹專業的課程助教 (CRAC-LMD-GEK2033-TA)。
+請遵守以下回答規則：
+1. 請務必綜合並整合以下提供的三份教材內容進行條理分明的回答。
+2. 回答請保持簡明扼要，重點突出，總字數嚴格限制在 500 字以內。
+3. 若教材中未提及相關內容，請明確說明並給出合理的學習引導。
 
-        // ⚠️ 【關鍵修正 3】只取最新的 4 則對話歷史，防止 Token 累積過長
+【教材資料】:
+${docContext}`;
+        
         const MAX_HISTORY = 4;
         const recentHistory = chatHistory.slice(-MAX_HISTORY);
 
@@ -135,12 +172,11 @@ async function initWebLLM() {
           ...recentHistory
         ];
 
-        // 呼叫 WebLLM 進行串流生成
         const completion = await engine.chat.completions.create({
           messages: messages,
           stream: true,
-          temperature: 0.7,
-          max_tokens: 512, // 限制單次生成的最大 Token 數量
+          temperature: 0.6,
+          max_tokens: 650,
         });
 
         let fullResponse = "";
@@ -151,8 +187,10 @@ async function initWebLLM() {
           scrollChatToBottom();
         }
 
-        // 紀錄 AI 回應至歷史
         chatHistory.push({ role: "assistant", content: fullResponse });
+
+        // 🌟 自動生成延伸建議問題
+        await generateFollowUpQuestions(userText, fullResponse);
 
       } catch (error) {
         console.error("生成錯誤:", error);
@@ -160,10 +198,65 @@ async function initWebLLM() {
         aiMessageEl.classList.add("error");
       } finally {
         document.getElementById("send-btn").disabled = false;
+        toggleSuggestButtons(false);
       }
     };
 
-    // UI 輔助函式
+    // 4. 動態生成建議問題的邏輯
+    async function generateFollowUpQuestions(lastUserQuery, lastAiResponse) {
+      try {
+        const prompt = `根據使用者提問：「${lastUserQuery}」與你的回答：「${lastAiResponse}」，請生成 3 個使用者可能會想繼續追問的簡短問題。
+要求：
+1. 每個問題必須簡短（20字以內）。
+2. 只需輸出 3 個問題，每行一個問題。
+3. 格式必須嚴格遵守：
+Q1: 問題一
+Q2: 問題二
+Q3: 問題三`;
+
+        const response = await engine.chat.completions.create({
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 150,
+          temperature: 0.7,
+        });
+
+        const text = response.choices[0]?.message?.content || "";
+        const lines = text.split("\n").map(l => l.trim()).filter(l => l.startsWith("Q"));
+        
+        const newQuestions = lines.map(l => l.replace(/^Q\d+[:：]\s*/, "")).slice(0, 3);
+
+        if (newQuestions.length > 0) {
+          renderSuggestedQuestions(newQuestions);
+        }
+      } catch (err) {
+        console.warn("無法生成後續建議問題:", err);
+      }
+    }
+
+    // 渲染 / 更新建議按鈕介面
+    function renderSuggestedQuestions(questions) {
+      const container = document.getElementById("suggested-questions");
+      container.innerHTML = ""; // 清空舊的按鈕
+
+      questions.forEach(q => {
+        const btn = document.createElement("button");
+        btn.className = "suggest-btn";
+        btn.innerText = `💡 ${q}`;
+        btn.onclick = () => window.askQuestion(q);
+        container.appendChild(btn);
+      });
+    }
+
+    // 5. 點擊預設建議問題的處理函式
+    window.askQuestion = function (questionText) {
+      window.sendMessage(questionText);
+    };
+
+    function toggleSuggestButtons(disabled) {
+      const buttons = document.querySelectorAll(".suggest-btn");
+      buttons.forEach(btn => btn.disabled = disabled);
+    }
+
     function appendMessage(role, text) {
       const chatBox = document.getElementById("chat-box");
       const msgDiv = document.createElement("div");
@@ -192,6 +285,14 @@ async function initWebLLM() {
   <div id="status" class="system-status">正在載入系統中...</div>
 
   <div id="chat-box"></div>
+
+  <!-- 預設與動態建議問題按鈕區塊 -->
+  <div id="suggested-questions">
+    <button class="suggest-btn" onclick="askQuestion('甚麼是文化挪用？')" disabled>💡 甚麼是文化挪用？</button>
+    <button class="suggest-btn" onclick="askQuestion('甚麼是文化保育？')" disabled>💡 甚麼是文化保育？</button>
+    <button class="suggest-btn" onclick="askQuestion('甚麼是文化安全？')" disabled>💡 甚麼是文化安全？</button>
+    <button class="suggest-btn" onclick="askQuestion('文化挪用與三國志有甚麼關係？')" disabled>💡 文化挪用與三國志有甚麼關係？</button>
+  </div>
 
   <div id="input-container">
     <input type="text" id="user-input" placeholder="請輸入關於課程的問題..." onkeypress="if(event.key==='Enter') sendMessage()" />
