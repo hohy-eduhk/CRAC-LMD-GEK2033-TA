@@ -227,7 +227,7 @@
           fetchDoc("doc3.txt").catch(() => "")
         ]);
 
-        const MAX_CHAR_PER_DOC = 800; // 精簡 Prompt 提升思考速度
+        const MAX_CHAR_PER_DOC = 400; // 精簡 Prompt 提升思考速度
         docContext = `
 【教材一】: ${d1.slice(0, MAX_CHAR_PER_DOC)}
 【教材二】: ${d2.slice(0, MAX_CHAR_PER_DOC)}
@@ -305,12 +305,13 @@ ${docContext}`;
           ...recentHistory
         ];
 
-        const completion = await engine.chat.completions.create({
-          messages: messages,
-          stream: true,
-          temperature: 0.5,
-          max_tokens: 500,
-        });
+       const completion = await engine.chat.completions.create({
+  messages: messages,
+  stream: true,
+  temperature: 0.5,
+  max_tokens: 400, // 💡 限制生成長度，避免模型長篇大論拖慢速度
+});
+        
 
         let fullText = "";
         for await (const chunk of completion) {
