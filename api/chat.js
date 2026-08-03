@@ -4,13 +4,18 @@ export default async function handler(req, res) {
   }
 
   const { messages, docContext } = req.body;
-  const API_KEY = process.env.OPENROUTER_API_KEY;
+  const API_KEY = process.env.GEMINI_API_KEY;
 
   if (!API_KEY) {
-    return res.status(500).json({ error: '伺服器未設定 OPENROUTER_API_KEY 環境變數' });
+    return res.status(500).json({ error: '伺服器未設定 GEMINI_API_KEY 環境變數' });
   }
 
   const safeMessages = Array.isArray(messages) ? messages : [];
+
+  const formattedContents = safeMessages.map(msg => ({
+    role: msg.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: msg.content }]
+  }));
 
   const systemPrompt = `你是一名課程助教 (GEK2033-TA)。
 請遵守以下規則：
@@ -24,53 +29,37 @@ export default async function handler(req, res) {
 【教材內容】:
 ${docContext || "無提供教材"}`;
 
-  // 💡 備援模型清單：若第一個模型呼叫失敗，自動嘗試下一個！
-  const candidateModels = [
-    "google/gemini-2.0-flash-exp:free",
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "deepseek/deepseek-r1:free"
-  ];
+  try {
+    const googleApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
 
-  let lastError = null;
-
-  for (const model of candidateModels) {
-    try {
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${API_KEY}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "https://vercel.com",
-          "X-Title": "GEK2033 Course TA Bot"
+    const response = await fetch(googleApiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        system_instruction: {
+          parts: [{ text: systemPrompt }]
         },
-        body: JSON.stringify({
-          model: model,
-          messages: [
-            { role: "system", content: systemPrompt },
-            ...safeMessages
-          ],
+        contents: formattedContents,
+        generationConfig: {
           temperature: 0.5,
-          max_tokens: 400
-        })
-      });
+          maxOutputTokens: 400
+        }
+      })
+    });
 
-      const data = await response.json();
+    const data = await response.json();
 
-      if (response.ok && data.choices?.[0]?.message?.content) {
-        // 成功取得回應，直接回傳
-        return res.status(200).json({ reply: data.choices[0].message.content });
-      }
-
-      // 如果當前模型回傳錯誤，記錄錯誤並嘗試下一個模型
-      lastError = data.error?.message || `模型 ${model} 呼叫失敗`;
-      console.warn(`[Model Fallback] ${model} 失敗:`, lastError);
-
-    } catch (err) {
-      lastError = err.message;
-      console.warn(`[Model Fallback] 請求異常:`, err);
+    if (!response.ok) {
+      throw new Error(data.error?.message || "Google API 呼叫失敗");
     }
-  }
 
-  // 若所有模型都嘗試失敗，才回傳錯誤訊息
-  return res.status(500).json({ error: `所有免費模型皆無回應，最後錯誤：${lastError}` });
+    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "AI 暫時無法產生回應，請重試。";
+    return res.status(200).json({ reply });
+
+  } catch (error) {
+    console.error("API Error:", error);
+    return res.status(500).json({ error: error.message || "伺服器內部錯誤" });
+  }
 }
