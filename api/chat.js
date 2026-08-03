@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // 強制以 JSON 回傳所有回應，避免前端遇到 Unexpected token '<'
   res.setHeader('Content-Type', 'application/json');
 
   if (req.method !== 'POST') {
@@ -8,20 +7,13 @@ export default async function handler(req, res) {
 
   try {
     const { messages, docContext } = req.body || {};
-    // 讀取 Vercel 的 GEMINI_API_KEY 環境變數
-    const API_KEY = process.env.GEMINI_API_KEY;
+    const API_KEY = process.env.OPENROUTER_API_KEY;
 
     if (!API_KEY) {
-      return res.status(500).json({ error: '伺服器未設定 GEMINI_API_KEY 環境變數' });
+      return res.status(500).json({ error: '伺服器未設定 OPENROUTER_API_KEY 環境變數' });
     }
 
     const safeMessages = Array.isArray(messages) ? messages : [];
-
-    // 格式化對話歷史紀錄符合 Gemini 格式
-    const formattedContents = safeMessages.map(msg => ({
-      role: msg.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: msg.content || '' }]
-    }));
 
     const systemPrompt = `你是一名課程助教 (GEK2033-TA)。
 請遵守以下規則：
@@ -35,23 +27,23 @@ export default async function handler(req, res) {
 【教材內容】:
 ${docContext || "無提供教材"}`;
 
-    // 呼叫 Google 官方 Gemini 2.0 Flash REST API
-    const googleApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
-
-    const response = await fetch(googleApiUrl, {
+    // 使用目前 OpenRouter 上穩定且免費的頂級模型 Meta Llama 3.3 70B
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Authorization": `Bearer ${API_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://vercel.com",
+        "X-Title": "GEK2033 Course TA Bot"
       },
       body: JSON.stringify({
-        system_instruction: {
-          parts: [{ text: systemPrompt }]
-        },
-        contents: formattedContents,
-        generationConfig: {
-          temperature: 0.5,
-          maxOutputTokens: 400
-        }
+        model: "meta-llama/llama-3.3-70b-instruct:free",
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...safeMessages
+        ],
+        temperature: 0.5,
+        max_tokens: 400
       })
     });
 
@@ -59,15 +51,15 @@ ${docContext || "無提供教材"}`;
 
     if (!response.ok) {
       return res.status(response.status).json({ 
-        error: data.error?.message || "Google Gemini API 回傳錯誤" 
+        error: data.error?.message || "OpenRouter API 呼叫失敗" 
       });
     }
 
-    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "AI 暫時無法產生回應，請重試。";
+    const reply = data.choices?.[0]?.message?.content || "AI 暫時無法產生回應，請重試。";
     return res.status(200).json({ reply });
 
   } catch (error) {
-    console.error("Vercel Function Error:", error);
-    return res.status(500).json({ error: error.message || "伺服器內部發生未知錯誤" });
+    console.error("Vercel API Error:", error);
+    return res.status(500).json({ error: error.message || "伺服器內部發生錯誤" });
   }
 }
