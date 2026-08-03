@@ -1,17 +1,21 @@
 export default async function handler(req, res) {
-  // 僅允許 POST 請求
+  // 1. 僅允許 POST 請求
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   const { messages, docContext } = req.body;
-  // 從 Vercel 環境變數讀取 OpenRouter API Key
-  const API_KEY = process.env.OPENROUTER_API_KEY;
 
+  // 2. 讀取與驗證 API Key
+  const API_KEY = process.env.OPENROUTER_API_KEY;
   if (!API_KEY) {
     return res.status(500).json({ error: '伺服器未設定 OPENROUTER_API_KEY 環境變數' });
   }
 
+  // 3. 安全防禦：確保 messages 是陣列
+  const safeMessages = Array.isArray(messages) ? messages : [];
+
+  // 4. 設定系統提示詞 (System Prompt)
   const systemPrompt = `你是一名課程助教 (GEK2033-TA)。
 請遵守以下規則：
 1. 整合資料簡明回答，字數控制在 300 字內。
@@ -22,7 +26,7 @@ export default async function handler(req, res) {
 3. 問題三
 
 【教材內容】:
-${docContext}`;
+${docContext || "無提供教材"}`;
 
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -30,15 +34,14 @@ ${docContext}`;
       headers: {
         "Authorization": `Bearer ${API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://vercel.com", // OpenRouter 要求的標頭
+        "HTTP-Referer": "https://vercel.com",
         "X-Title": "GEK2033 Course TA Bot"
       },
       body: JSON.stringify({
-        // 使用 OpenRouter 免費且極速的模型
         model: "google/gemini-2.0-flash-lite-preview-02-05:free",
         messages: [
           { role: "system", content: systemPrompt },
-          ...messages
+          ...safeMessages
         ],
         temperature: 0.5,
         max_tokens: 400
@@ -47,14 +50,15 @@ ${docContext}`;
 
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.error?.message || "API 呼叫失敗");
+      throw new Error(data.error?.message || "OpenRouter API 呼叫失敗");
     }
 
-    const reply = data.choices[0].message.content;
+    // 5. 安全解析 AI 回覆內容
+    const reply = data.choices?.[0]?.message?.content || "AI 暫時無法產生回應，請重試。";
     return res.status(200).json({ reply });
 
   } catch (error) {
-    console.error("Error:", error);
+    console.error("API Handling Error:", error);
     return res.status(500).json({ error: error.message || "伺服器內部錯誤" });
   }
 }
