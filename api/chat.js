@@ -38,7 +38,7 @@ ${docContext || "無提供教材"}`;
         "X-Title": "GEK2033 Course TA Bot"
       },
       body: JSON.stringify({
-       model: "meta-llama/llama-3.3-70b-instruct:free",
+       model: "google/gemini-2.0-flash-lite-001:free",
         messages: [
           { role: "system", content: systemPrompt },
           ...safeMessages
