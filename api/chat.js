@@ -27,36 +27,54 @@ export default async function handler(req, res) {
 【教材內容】:
 ${docContext || "無提供教材"}`;
 
-    // 使用目前 OpenRouter 上穩定且免費的頂級模型 Meta Llama 3.3 70B
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${API_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://vercel.com",
-        "X-Title": "GEK2033 Course TA Bot"
-      },
-      body: JSON.stringify({
-        model: "meta-llama/llama-3.3-70b-instruct:free",
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...safeMessages
-        ],
-        temperature: 0.5,
-        max_tokens: 400
-      })
-    });
+    // 💡 目前 OpenRouter 上最新、穩定且完全免費的模型備選清單
+    const freeModels = [
+      "qwen/qwen-2.5-72b-instruct:free",
+      "google/gemini-2.0-flash-lite-001",
+      "mistralai/mistral-7b-instruct:free",
+      "gryphe/mythomax-l2-13b:free"
+    ];
 
-    const data = await response.json();
+    let lastErrorMessage = "";
 
-    if (!response.ok) {
-      return res.status(response.status).json({ 
-        error: data.error?.message || "OpenRouter API 呼叫失敗" 
-      });
+    // 自動輪詢，確保一定有一個免費模型能運作
+    for (const model of freeModels) {
+      try {
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${API_KEY}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://vercel.com",
+            "X-Title": "GEK2033 Course TA Bot"
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: [
+              { role: "system", content: systemPrompt },
+              ...safeMessages
+            ],
+            temperature: 0.5,
+            max_tokens: 400
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.choices?.[0]?.message?.content) {
+          // 成功取得回應！
+          return res.status(200).json({ reply: data.choices[0].message.content });
+        }
+
+        lastErrorMessage = data.error?.message || `Model ${model} failed`;
+        console.warn(`[OpenRouter Fallback] ${model} 失敗，嘗試下一個...`, lastErrorMessage);
+      } catch (err) {
+        lastErrorMessage = err.message;
+      }
     }
 
-    const reply = data.choices?.[0]?.message?.content || "AI 暫時無法產生回應，請重試。";
-    return res.status(200).json({ reply });
+    // 若所有模型都嘗試失敗，回傳最後的錯誤訊息
+    return res.status(500).json({ error: `所有免費模型皆無法回應：${lastErrorMessage}` });
 
   } catch (error) {
     console.error("Vercel API Error:", error);
