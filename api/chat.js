@@ -1,4 +1,5 @@
 export default async function handler(req, res) {
+  // 強制設定 Header 為 JSON，防止 Vercel 吐出預設的 HTML 錯誤頁面
   res.setHeader('Content-Type', 'application/json');
 
   if (req.method !== 'POST') {
@@ -18,7 +19,7 @@ export default async function handler(req, res) {
     const systemPrompt = `你是一名課程助教 (GEK2033-TA)。
 請遵守以下規則：
 1. 整合資料簡明回答，字數控制在 300 字內。
-2. 在回答的最末尾，另起一行，嚴格附上 3 個適合繼續追問的簡短問題，格式必須如下：
+2. 在回答的最末尾，另起一行，附上 3 個適合繼續追問的簡短問題，格式為：
 [建議問題]
 1. 問題一
 2. 問題二
@@ -27,57 +28,36 @@ export default async function handler(req, res) {
 【教材內容】:
 ${docContext || "無提供教材"}`;
 
-    // 免費穩定模型備選陣列
-    const freeModels = [
-      "qwen/qwen-2.5-72b-instruct:free",
-      "google/gemini-2.0-flash-lite-001",
-      "mistralai/mistral-7b-instruct:free",
-      "gryphe/mythomax-l2-13b:free"
-    ];
+    // 使用 OpenRouter 上目前穩定的免費模型
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${API_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://vercel.com",
+        "X-Title": "GEK2033 Course TA Bot"
+      },
+      body: JSON.stringify({
+        model: "qwen/qwen-2.5-72b-instruct:free",
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...safeMessages
+        ],
+        temperature: 0.5,
+        max_tokens: 400
+      })
+    });
 
-    let lastErrorMessage = "";
+    const data = await response.json();
 
-    for (const model of freeModels) {
-      try {
-        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${API_KEY}`,
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://vercel.com",
-            "X-Title": "GEK2033 Course TA Bot"
-          },
-          body: JSON.stringify({
-            model: model,
-            messages: [
-              { role: "system", content: systemPrompt },
-              ...safeMessages
-            ],
-            temperature: 0.3,
-            max_tokens: 500
-          })
-        });
-
-        const data = await response.json();
-
-        if (response.ok && data.choices?.[0]?.message?.content) {
-          let rawReply = data.choices[0].message.content.trim();
-
-          // 💡 安全防護：如果模型忘記輸出 [建議問題] 標籤，自動補上以防前端比對失敗
-          if (!rawReply.includes('[建議問題]')) {
-            rawReply += '\n\n[建議問題]\n1. 請說明更多細節\n2. 這項內容的應用是什麼？\n3. 有相關的範例嗎？';
-          }
-
-          return res.status(200).json({ reply: rawReply });
-        }
-
-        lastErrorMessage = data.error?.message || `Model ${model} failed`;
-      } catch (err) {
-        lastErrorMessage = err.message;
-      }
+    if (!response.ok) {
+      return res.status(response.status).json({ 
+        error: data.error?.message || "OpenRouter API 呼叫失敗" 
+      });
     }
 
-    return res.status(500).json({ error: `所有免費模型皆無法回應：${lastErrorMessage}` });
+    const reply = data.choices?.[0]?.message?.content || "AI 暫時無法產生回應，請重試。";
+    return res.status(200).json({ reply });
 
   } catch (error) {
     console.error("Vercel API Error:", error);
